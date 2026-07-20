@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+  <html lang="es">
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Logística</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+  :root{--azul:#2563eb;--verde:#16a34a;--gris:#f3f4f6;}
+  *{box-sizing:border-box;}
+body{font-family:system-ui,Arial,sans-serif;margin:0;background:var(--gris);color:#111;}
+header{background:var(--azul);color:#fff;padding:14px;text-align:center;font-weight:600;position:sticky;top:0;}
+#login{max-width:360px;margin:80px auto;background:#fff;padding:24px;border-radius:12px;text-align:center;}
+#login input{width:100%;padding:12px;font-size:1.4rem;text-align:center;letter-spacing:4px;margin:12px 0;border:1px solid #ccc;border-radius:8px;}
+button{background:var(--azul);color:#fff;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;}
+button.exito{background:var(--verde);}
+nav{display:flex;background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:48px;}
+nav button{flex:1;background:none;color:#333;border-radius:0;padding:12px;font-weight:600;}
+nav button.activo{border-bottom:3px solid var(--azul);color:var(--azul);}
+main{max-width:640px;margin:0 auto;padding:14px;}
+.oculto{display:none;}
+.tarjeta{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;}
+.tarjeta.atendido{opacity:.6;}
+.fila{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;}
+.etiqueta{font-size:.75rem;padding:3px 8px;border-radius:20px;background:#fde68a;color:#92400e;}
+.etiqueta.ok{background:#bbf7d0;color:#166534;}
+input{padding:8px;border:1px solid #ccc;border-radius:6px;width:100%;margin:4px 0;}
+table{width:100%;border-collapse:collapse;font-size:.9rem;}
+th,td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left;}
+.form-nuevo{background:#fff;padding:14px;border-radius:10px;margin-bottom:14px;}
+  </style>
+  </head>
+  <body>
+
+  <div id="login">
+  <h2>Ingreso equipo</h2>
+  <p>Ingresa el PIN del equipo</p>
+<input id="pin" type="password" inputmode="numeric" maxlength="6" placeholder="----">
+  <button onclick="validarPin()">Entrar</button>
+  <p id="pinError" style="color:red;display:none;">PIN incorrecto</p>
+  </div>
+
+  <div id="app" class="oculto">
+  <header>Sistema de Logistica</header>
+<nav>
+<button class="activo" onclick="mostrarTab('pedidos')">Pedidos</button>
+<button onclick="mostrarTab('stock')">Stock</button>
+  <button onclick="mostrarTab('kardex')">Kardex</button>
+  </nav>
+  <main>
+  <section id="tab-pedidos">
+  <div class="form-nuevo">
+  <h3>Nuevo pedido</h3>
+  <input id="np-cliente" placeholder="Cliente">
+  <input id="np-direccion" placeholder="Direccion">
+<input id="np-producto" placeholder="Producto">
+  <input id="np-cantidad" type="number" min="1" value="1" placeholder="Cantidad">
+  <button onclick="crearPedido()">Crear pedido</button>
+  </div>
+  <div id="lista-pedidos"></div>
+  </section>
+
+  <section id="tab-stock" class="oculto">
+<div class="form-nuevo">
+  <h3>Registrar movimiento de stock</h3>
+  <input id="st-producto" placeholder="Producto">
+<input id="st-cantidad" type="number" placeholder="Cantidad (negativo para restar)">
+  <button onclick="moverStock()">Registrar</button>
+  </div>
+  <table>
+  <thead><tr><th>Producto</th><th>Cantidad</th><th>Actualizado</th></tr></thead>
+<tbody id="lista-stock"></tbody>
+</table>
+</section>
+
+  <section id="tab-kardex" class="oculto">
+<table>
+<thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cant.</th></tr></thead>
+  <tbody id="lista-kardex"></tbody>
+  </table>
+</section>
+</main>
+  </div>
+
+  <script>
+  const SUPABASE_URL = "https://ongppbnbzevocqnwhcly.supabase.co";
+const SUPABASE_KEY = "PEGA_AQUI_TU_CLAVE_PUBLICA_ANON";
+const PIN_EQUIPO = "2026";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+function validarPin(){
+  if(document.getElementById('pin').value === PIN_EQUIPO){
+document.getElementById('login').classList.add('oculto');
+document.getElementById('app').classList.remove('oculto');
+cargarTodo();
+  } else {
+document.getElementById('pinError').style.display = 'block';
+  }
+}
+
+function mostrarTab(tab){
+  ['pedidos','stock','kardex'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('oculto', t!==tab));
+document.querySelectorAll('nav button').forEach(b=>b.classList.remove('activo'));
+event.target.classList.add('activo');
+}
+
+async function cargarTodo(){ await cargarPedidos(); await cargarStock(); await cargarKardex(); }
+
+
+async function crearPedido(){
+const cliente = document.getElementById('np-cliente').value.trim();
+const direccion = document.getElementById('np-direccion').value.trim();
+const producto = document.getElementById('np-producto').value.trim();
+const cantidad = parseInt(document.getElementById('np-cantidad').value) || 1;
+if(!cliente || !producto){ alert('Completa cliente y producto'); return; }
+const { error } = await sb.from('pedidos').insert([{ cliente, direccion, producto, cantidad, estado:'Pendiente' }]);
+if(error){ alert('Error: '+error.message); return; }
+document.getElementById('np-cliente').value='';
+  document.getElementById('np-direccion').value='';
+    document.getElementById('np-producto').value='';
+      document.getElementById('np-cantidad').value=1;
+cargarPedidos();
+            }
+
+async function cargarPedidos(){
+const { data, error } = await sb.from('pedidos').select('*').order('fecha_creacion', {ascending:false});
+if(error){ console.error(error); return; }
+document.getElementById('lista-pedidos').innerHTML = data.map(p => `<div class="tarjeta ${p.estado==='Atendido'?'atendido':''}"><div class="fila"><strong>${p.cliente}</strong><span class="etiqueta ${p.estado==='Atendido'?'ok':''}">${p.estado}</span></div><div>${p.producto} x${p.cantidad}</div><small>${p.direccion||''}</small><br>${p.foto_url ? `<img src="${p.foto_url}" style="max-width:100%;border-radius:8px;margin-top:6px;">` : ''}${p.estado!=='Atendido' ? `<div style="margin-top:8px;"><input type="file" accept="image/*" capture="environment" id="foto-${p.id}"><button class="exito" onclick="marcarAtendido(${p.id})">Atendido</button></div>` : ''}</div>`).join('') || '<p>No hay pedidos aun.</p>';
+  }
+
+
+async function marcarAtendido(id){
+const fileInput = document.getElementById('foto-'+id);
+let foto_url = null;
+if(fileInput && fileInput.files[0]){
+const file = fileInput.files[0];
+const nombre = `guia-${id}-${Date.now()}.jpg`;
+const { error: e1 } = await sb.storage.from('guias').upload(nombre, file);
+if(e1){ alert('Error subiendo foto: '+e1.message); return; }
+foto_url = sb.storage.from('guias').getPublicUrl(nombre).data.publicUrl;
+}
+const { error } = await sb.from('pedidos').update({ estado:'Atendido', foto_url, fecha_atendido: new Date().toISOString() }).eq('id', id);
+if(error){ alert('Error: '+error.message); return; }
+cargarPedidos();
+}
+
+
+async function moverStock(){
+  const producto = document.getElementById('st-producto').value.trim();
+const cantidad = parseInt(document.getElementById('st-cantidad').value);
+if(!producto || isNaN(cantidad)){ alert('Completa producto y cantidad'); return; }
+const { data: existente } = await sb.from('stock').select('*').eq('producto', producto).maybeSingle();
+if(existente){
+await sb.from('stock').update({ cantidad: existente.cantidad + cantidad, actualizado: new Date().toISOString() }).eq('producto', producto);
+} else {
+await sb.from('stock').insert([{ producto, cantidad }]);
+}
+await sb.from('kardex').insert([{ producto, tipo: cantidad>=0?'Entrada':'Salida', cantidad: Math.abs(cantidad) }]);
+document.getElementById('st-producto').value='';
+  document.getElementById('st-cantidad').value='';
+    cargarStock(); cargarKardex();
+    }
+
+
+async function cargarStock(){
+const { data, error } = await sb.from('stock').select('*').order('producto');
+if(error){ console.error(error); return; }
+document.getElementById('lista-stock').innerHTML = data.map(s => `<tr><td>${s.producto}</td><td>${s.cantidad}</td><td>${new Date(s.actualizado).toLocaleString()}</td></tr>`).join('') || '<tr><td colspan="3">Sin productos aun.</td></tr>';
+}
+
+async function cargarKardex(){
+const { data, error } = await sb.from('kardex').select('*').order('fecha', {ascending:false}).limit(100);
+if(error){ console.error(error); return; }
+document.getElementById('lista-kardex').innerHTML = data.map(k => `<tr><td>${new Date(k.fecha).toLocaleString()}</td><td>${k.producto}</td><td>${k.tipo}</td><td>${k.cantidad}</td></tr>`).join('') || '<tr><td colspan="4">Sin movimientos aun.</td></tr>';
+}
+</script>
+</body>
+</html>
